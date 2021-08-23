@@ -4,28 +4,28 @@ import jwt, { JsonWebTokenError } from 'jsonwebtoken';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
 import session from 'express-session';
+import router from './managementRoute'
+import client from './db';
+import { mapUser } from './functions';
 
 
 const app = express();
 
 
-const users = [
-    {
-        id: "1",
-        username: 'John',
-        password: '12345678',
-        isAdmin: true
-    },
-    {
-        id: "2",
-        username: 'jane',
-        password: 'Jane0908',
-        isAdmin: false
+const getAllUsers = async() => {
+    try {
+        const allTodos = await client.query("SELECT * FROM users");
+        return allTodos.rows;
+        
+    } catch (error) {
+        console.log(error)
     }
-]
+}
+
 app.use(express.urlencoded({ extended: false }));
 app.use(cookieParser());
-app.use(express.json())
+app.use(express.json());
+app.use('/management',router)
 app.use(cors({
     origin: 'http://localhost:3000',
     credentials: true
@@ -46,7 +46,7 @@ app.use(session({
 let refreshTokens = [];
 let blockedTokens = [];
 const generateAccessToken = (user) => {
-    return jwt.sign({ id: user.id, isAdmin: user.isAdmin }, 'mySecretKey', { expiresIn: '2m' });
+    return jwt.sign({ id: user.id, isAdmin: user.isAdmin }, 'mySecretKey', { expiresIn: '30m' });
 }
 
 const generateRefreshToken = (user) => {
@@ -75,22 +75,21 @@ app.post('/api/refreshToken', (req, res) => {
 })
 
 
-app.post('/api/login', (req, res) => {
-    const {username , password} = req.body;
-    console.log('username is' + username)
-    const user = users.find((u) => {
-        return u.username === username && u.password === password
-    });
-    if (user) {
+app.post('/api/login', async (req, res) => {
+    const {usernameOrEmail , password} = req.body;
+    const user = await client.query('SELECT * FROM users WHERE (username = $1 OR email = $1) AND password = $2 ',[usernameOrEmail , password]);
+    const userFound = user.rows[0]
+    if (userFound) {
         console.log('Reached here')
-        const accessToken = generateAccessToken(user);
-        const refreshToken = generateRefreshToken(user);
+        const accessToken = generateAccessToken(userFound);
+        const refreshToken = generateRefreshToken(userFound);
         res.cookie('AccessT',accessToken);
         res.cookie('AccessRefreshT',refreshToken)
         refreshTokens.push(refreshToken);
         res.json({
-            username : user.username,
-            isAdmin : user.isAdmin,
+            username : userFound.username,
+            isAdmin : userFound.is_admin,
+            email : userFound.email,
             accessToken,
             refreshToken,
         });
@@ -121,17 +120,6 @@ const verify = (req, res, next) => {
 }
 
 
-app.delete("/api/users/:userId", verify, (req, res) => {
-    console.log(req.user)
-    if (req.user.id === req.params.userId || req.user.isAdmin) {
-        res.status(200).json('User has been deleted')
-
-    }
-    else {
-        res.status(403).json('You are not allowed to delete this user')
-    }
-
-})
 
 app.post('/api/logout', verify, (req, res) => {
     const refreshToken = req.body.token;
@@ -141,42 +129,67 @@ app.post('/api/logout', verify, (req, res) => {
     res.status(200).json('You logged out successfully');
 })
 
-app.post('/api/checklogin', verify, (req, res) => {
+app.post('/api/checklogin', verify, async (req, res) => {
     console.log('Hitted');
-    const userResponse = users.find(u => u.id === req.user.id)
+    const user = await client.query('SELECT * FROM users WHERE id = $1',[req.user.id]);
+    const userResponse = user.rows[0];
     console.log(userResponse);
     const detailsTobeSent = {
+        email : userResponse.email,
         username : userResponse.username,
-        isAdmin : userResponse.isAdmin
+        isAdmin : userResponse.is_admin
     }
     res.status(200).send(userResponse ? detailsTobeSent : null);
 
 })
-app.get('/cookie', (req, res) => {
-    res.cookie('123', 'dwqsa')
-    res.send('xas');
-});
+
+
+app.post('/api/register', async(req, res) => {
+   try {
+    const allItems = await getAllUsers();
+    const lastId = allItems[allItems.length - 1].id + 1
+    const {email, password} = req.body;
+    const user = await client.query('SELECT * FROM users WHERE email = $1',[email]);
+    const userExists = user.rows[0]
+    if (userExists) {
+        res.status(600).send({message : 'Email is already used'})
+    }
+    else {
+        const insertUser = await client.query('INSERT INTO users(id ,email, password, is_admin) VALUES($1,$2, $3, FALSE) RETURNING *',
+        [lastId, email, password]);
+        res.status(200).send({message : 'Registration went successful',userInserted : mapUser(insertUser.rows[0])});
+    } 
+       
+   } catch (error) {
+       console.log(error)
+       
+   }
+})
+
+
+app.get('/',(req, res) => {
+    res.json({message : 'Here you recahed'});
+})
 app.listen(8000, (req, res) => {
 
-
-    console.log("Backend server is running")
+    client.connect((err) => {
+        if (err) {
+            console.log(err)
+        }
+        else {
+            console.log('Connected')
+            client.query('CREATE TABLE IF NOT EXISTS Users(id int, username varchar(255), email varchar(255), password varchar(255), is_admin Boolean)')
+        }
+    })
+    
 })
 
 
 
 
-/**
-const client = new Client({
-  user: 'postgres',
-  host: 'localhost',
-  database: 'postgres',
-  password: '15111996',
-  port: 5432,
-})
 
-client.connect((err) => {
-   //
- **/
+
+
 
 
 
