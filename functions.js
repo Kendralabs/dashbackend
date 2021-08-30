@@ -1,4 +1,4 @@
-export const mapUser = (obj) => {
+const mapUser = (obj) => {
     const retrunObj = {
         id : obj.id,
         username : obj.username,
@@ -8,3 +8,5 @@ export const mapUser = (obj) => {
     }
     return retrunObj;
 }
+
+module.exports = mapUser
