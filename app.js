@@ -1,12 +1,11 @@
 const { Pool, Client } = require('pg');
-import express from 'express';
-import jwt, { JsonWebTokenError } from 'jsonwebtoken';
-import cors from 'cors';
-import cookieParser from 'cookie-parser';
-import session from 'express-session';
-import router from './managementRoute'
-import client from './db';
-import { mapUser } from './functions';
+const  express = require('express');
+const jwt = require('jsonwebtoken');
+const cors = require('cors');
+const  cookieParser  = require('cookie-parser');
+const session = require('express-session');
+const client = require( './db');
+const { mapUser } = require('./functions');
 
 
 const app = express();
@@ -25,7 +24,7 @@ const getAllUsers = async() => {
 app.use(express.urlencoded({ extended: false }));
 app.use(cookieParser());
 app.use(express.json());
-app.use('/management',router)
+
 app.use(cors({
     origin: 'http://localhost:3000',
     credentials: true
@@ -144,7 +143,7 @@ app.post('/api/checklogin', verify, async (req, res) => {
 })
 
 
-app.post('/api/register', async(req, res) => {
+app.post('api/register', async(req, res) => {
    try {
     const allItems = await getAllUsers();
     const lastId = allItems[allItems.length - 1].id + 1
@@ -167,6 +166,7 @@ app.post('/api/register', async(req, res) => {
 })
 
 
+
 app.get('/',(req, res) => {
     res.json({message : 'Here you recahed'});
 })
@@ -178,8 +178,11 @@ app.listen(8000, (req, res) => {
         }
         else {
             console.log('Connected')
-            client.query('CREATE TABLE IF NOT EXISTS Users(id int, username varchar(255), email varchar(255), password varchar(255), is_admin Boolean)')
+            client.query('DROP TABLE users');
+            client.query('CREATE TABLE users(id int, username varchar(255), email varchar(255), password varchar(255), is_admin Boolean)')
+            client.query("INSERT INTO users VALUES(1, 'admin','admin@mail.com', '12345678', TRUE)")
         }
+
     })
     
 })
